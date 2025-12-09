@@ -1,0 +1,216 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id            String        @id @default(cuid())
+  name          String
+  ruc           String        @unique
+  employees     Employee[]
+  documents     Document[]
+  risks         Risk[]
+  inspections   Inspection[]
+  incidents     Incident[]
+  trainings     Training[]
+  eppDeliveries EppDelivery[]
+  actionPlans   ActionPlan[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Employee {
+  id                   String             @id @default(cuid())
+  dni                  String             @unique
+  fullName             String
+  position             String
+  area                 String
+  companyId            String
+  company              Company            @relation(fields: [companyId], references: [id])
+  role                 Role               @default(WORKER)
+  trainings            TrainingEmployee[]
+  eppDeliveries        EppDelivery[]
+  signatures           Signature[]
+  actionPlans          ActionPlan[]       @relation("ActionPlanResponsible")
+  reportedIncidents    Incident[]         @relation("IncidentReportedBy")
+  performedInspections Inspection[]       @relation("InspectionPerformedBy")
+  createdAt            DateTime           @default(now())
+}
+
+enum Role {
+  ADMIN
+  SST
+  SUPERVISOR
+  WORKER
+}
+
+model Document {
+  id         String       @id @default(cuid())
+  title      String
+  type       DocumentType
+  fileUrl    String
+  version    Int          @default(1)
+  validUntil DateTime?
+  companyId  String
+  company    Company      @relation(fields: [companyId], references: [id])
+  signatures Signature[]
+  createdAt  DateTime     @default(now())
+}
+
+enum DocumentType {
+  POLICY
+  PROGRAM
+  NOMBRAMIENTO
+  PLAN
+  PROCEDURE
+}
+
+model Signature {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id])
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id])
+  incidentId String?
+  incident   Incident? @relation(fields: [incidentId], references: [id])
+  signedAt   DateTime  @default(now())
+}
+
+model Risk {
+  id              String       @id @default(cuid())
+  danger          String
+  riskDescription String
+  probability     Int
+  consequence     Int
+  inherentRisk    Int          @default(0)
+  controls        String[]
+  residualProb    Int?
+  residualCons    Int?
+  residualRisk    Int?
+  companyId       String
+  company         Company      @relation(fields: [companyId], references: [id])
+  actionPlans     ActionPlan[]
+}
+
+model ActionPlan {
+  id            String       @id @default(cuid())
+  description   String
+  responsibleId String
+  responsible   Employee     @relation("ActionPlanResponsible", fields: [responsibleId], references: [id])
+  dueDate       DateTime
+  status        ActionStatus @default(OPEN)
+  riskId        String?
+  risk          Risk?        @relation(fields: [riskId], references: [id])
+  incidentId    String?
+  incident      Incident?    @relation(fields: [incidentId], references: [id])
+  inspectionId  String?
+  inspection    Inspection?  @relation("ActionPlanInspection", fields: [inspectionId], references: [id])
+  companyId     String
+  company       Company      @relation(fields: [companyId], references: [id])
+  findings      Finding[]
+  createdAt     DateTime     @default(now())
+  completedAt   DateTime?
+}
+
+enum ActionStatus {
+  OPEN
+  IN_PROGRESS
+  OVERDUE
+  CLOSED
+}
+
+model Incident {
+  id            String       @id @default(cuid())
+  type          IncidentType
+  severity      Severity
+  description   String
+  location      String
+  gpsLat        Float?
+  gpsLng        Float?
+  happenedAt    DateTime
+  reportedById  String
+  reportedBy    Employee     @relation("IncidentReportedBy", fields: [reportedById], references: [id])
+  daysOff       Int?
+  notifiedIESS  Boolean      @default(false)
+  notifiedAt    DateTime?
+  companyId     String
+  company       Company      @relation(fields: [companyId], references: [id])
+  photos        String[]
+  investigation String?
+  rootCause     String?
+  signatures    Signature[]
+  actionPlans   ActionPlan[]
+  createdAt     DateTime     @default(now())
+}
+
+enum IncidentType {
+  ACCIDENT
+  INCIDENT
+  DISEASE
+}
+
+enum Severity {
+  MINOR
+  SERIOUS
+  FATAL
+}
+
+model Inspection {
+  id            String       @id @default(cuid())
+  checklistId   String
+  performedById String
+  performedBy   Employee     @relation("InspectionPerformedBy", fields: [performedById], references: [id])
+  area          String
+  performedAt   DateTime
+  answers       Json
+  findings      Finding[]
+  companyId     String
+  company       Company      @relation(fields: [companyId], references: [id])
+  offlineId     String?      @unique
+  actionPlans   ActionPlan[] @relation("ActionPlanInspection")
+}
+
+model Finding {
+  id             String      @id @default(cuid())
+  inspectionId   String
+  inspection     Inspection  @relation(fields: [inspectionId], references: [id])
+  description    String
+  requiresAction Boolean     @default(true)
+  actionPlanId   String?
+  actionPlan     ActionPlan? @relation(fields: [actionPlanId], references: [id])
+}
+
+model Training {
+  id        String             @id @default(cuid())
+  topic     String
+  duration  Int
+  date      DateTime
+  trainer   String
+  employees TrainingEmployee[]
+  companyId String
+  company   Company            @relation(fields: [companyId], references: [id])
+}
+
+model TrainingEmployee {
+  trainingId String
+  training   Training @relation(fields: [trainingId], references: [id])
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  @@id([trainingId, employeeId])
+}
+
+model EppDelivery {
+  id               String   @id @default(cuid())
+  employeeId       String
+  employee         Employee @relation(fields: [employeeId], references: [id])
+  items            String
+  deliveredAt      DateTime @default(now())
+  signedByEmployee Boolean  @default(false)
+  companyId        String
+  company          Company  @relation(fields: [companyId], references: [id])
+}
